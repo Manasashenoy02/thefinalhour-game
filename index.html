@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Final Hour</title>
+<style>
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: url("static/background.jpg") no-repeat center center fixed;
+  background-size: cover;
+  color: #E0F2FE;
+  margin: 0;
+  padding: 30px;
+}
+
+/* Dark overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: -1;
+}
+
+.card {
+  background: rgba(0, 32, 80, 0.7);
+  border: 1px solid #38BDF8;
+  padding: 25px;
+  border-radius: 14px;
+  box-shadow: 0 0 15px #0EA5E9;
+  max-width: 700px;
+  margin: auto;
+}
+h1, h2 { color: #38BDF8; }
+input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #38BDF8;
+  background: #001C3D;
+  color: #E0F2FE;
+  margin-top: 10px;
+  font-size: 1em;
+}
+button {
+  margin-top: 10px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #38BDF8;
+  color: #001025;
+  font-weight: bold;
+  cursor: pointer;
+}
+.hint {
+  display: none;
+  margin-top: 10px;
+  background: #075985;
+  padding: 10px;
+  border-radius: 8px;
+}
+.bad {
+  background: #7F1D1D;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+#timer {
+  font-size: 1.2em;
+  color: #FACC15;
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<div class="card" id="app"></div>
+
+<script>
+/* -------------------- GAME DATA -------------------- */
+const ROOMS = [
+  { title:"Room 1 · Clock Cycle Count", puzzle:"An instruction takes 3 cycles. How many cycles do 5 instructions take?", answer:"15", hint:"Multiply cycles per instruction." },
+  { title:"Room 2 · Binary Flip", puzzle:"Invert all bits of 10101010.", answer:"01010101", hint:"0 becomes 1, 1 becomes 0." },
+  { title:"Room 3 · Binary Arithmetic", puzzle:"Add 101101 + 011011 (binary).", answer:"1001000", hint:"Binary addition with carry." },
+  { title:"Room 4 · Binary Trap", puzzle:"The binary number 10101 hides a value.", answer:"21", hint:"16 + 4 + 1." },
+  { title:"Room 5 · Gate Identity", puzzle:"Which gate gives output 0 only when both inputs are 1?", answer:"nand", hint:"Opposite of AND." },
+  { title:"Room 6 · Hex Trap", puzzle:"Convert hexadecimal 3F to decimal.", answer:"63", hint:"F = 15." },
+  { title:"Room 7 · Command Limit", puzzle:"Only four bits decide intent. How many intentions exist?", answer:"16", hint:"Power of two." },
+  { title:"Room 8 · String Access", puzzle:"Word: PYTHON. Take letters 2 and 5, lowercase.", answer:"yt", hint:"Counting starts at 1." },
+  { title:"Room 9 · ASCII Value", puzzle:"What is the ASCII value of 'A'?", answer:"65", hint:"Uppercase starts at 65." },
+  { title:"Room 10 · The Final Flip", puzzle:"Truth XOR Truth XOR False. What remains?", answer:"0", hint:"XOR twice." }
+];
+
+/* -------------------- STATE -------------------- */
+let state = JSON.parse(localStorage.getItem("escapeState")) || {
+  room: 0,
+  score: 0,
+  time: 600   // 🔥 10 MINUTES TIMER
+};
+
+function save() {
+  localStorage.setItem("escapeState", JSON.stringify(state));
+}
+
+function normalize(s) {
+  return s.trim().toLowerCase().replace(/\s+/g,"");
+}
+
+/* -------------------- TIMER -------------------- */
+setInterval(() => {
+  if (state.time > 0) {
+    state.time--;
+    save();
+    const t = document.getElementById("timer");
+    if (t) {
+      let m = Math.floor(state.time / 60);
+      let s = state.time % 60;
+      t.textContent = `⏱️ ${m}:${s.toString().padStart(2,'0')}`;
+    }
+  } else {
+    renderGameOver();
+  }
+}, 1000);
+
+/* -------------------- RENDERING -------------------- */
+function renderHome() {
+  document.getElementById("app").innerHTML = `
+    <div style="text-align:center;">
+      <img src="static/logo.jpg"
+           style="width:220px;border-radius:15px;margin-bottom:20px;"
+           onerror="this.src='https://cdn.pixabay.com/photo/2016/03/27/21/16/padlock-1281580_1280.jpg'">
+
+      <h1>🔐 Escape Room 2.0</h1>
+      <p class="info">Solve all 10 rooms before the Final Hour is reached!</p>
+
+      <button onclick="renderRoom()">▶️ Play</button>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h2>📜 How to Play</h2>
+      <ol class="info">
+        <li>Click <b>Play</b> to begin at Room 1.</li>
+        <li>Solve each puzzle to unlock the next room.</li>
+        <li>Use hints if you get stuck.</li>
+        <li>Finish all <b>10 rooms</b> before the Final Hour is reached.</li>
+      </ol>
+    </div>
+  `;
+}
+
+function renderRoom() {
+  const room = ROOMS[state.room];
+  document.getElementById("app").innerHTML = `
+    <div style="display:flex;justify-content:space-between;">
+      <h2>${room.title}</h2>
+      <div id="timer"></div>
+    </div>
+    <p>${room.puzzle}</p>
+    <input id="answer" autofocus>
+    <button onclick="checkAnswer()">Unlock</button>
+    <button onclick="showHint()">Hint</button>
+    <p>Score: <b>${state.score}</b></p>
+    <div id="msg"></div>
+    <div id="hint" class="hint">💡 ${room.hint}</div>
+  `;
+}
+
+function checkAnswer() {
+  const input = document.getElementById("answer").value;
+  if (normalize(input) === normalize(ROOMS[state.room].answer)) {
+    state.score += 10;
+    state.room++;
+    save();
+    if (state.room >= ROOMS.length) renderWin();
+    else renderRoom();
+  } else {
+    document.getElementById("msg").innerHTML =
+      `<div class="bad">❌ Wrong answer. Try again.</div>`;
+  }
+}
+
+function showHint() {
+  document.getElementById("hint").style.display = "block";
+}
+
+function renderWin() {
+  document.getElementById("app").innerHTML = `
+    <h1>⏳ Final Hour Reached</h1>
+    <p>You have successfully completed all <b>10 rooms</b>.</p>
+    <p><b>Status:</b> 🔓 Access Granted — System Override Complete</p>
+    <p style="margin-top:20px;">
+      <b>Next Instruction:</b><br>
+      Proceed immediately to <b>Rule that leaves a red signature behind</b> to continue the puzzle.
+    </p>
+    <p>Final Score: <b>${state.score}</b></p>
+    <button onclick="resetGame()">Restart Simulation</button>
+  `;
+}
+
+function renderGameOver() {
+  document.getElementById("app").innerHTML = `
+    <h1>⏰ Time's Up</h1>
+    <p>Score: <b>${state.score}</b></p>
+    <button onclick="resetGame()">Try Again</button>
+  `;
+}
+
+function resetGame() {
+  localStorage.removeItem("escapeState");
+  state = { room:0, score:0, time:600 }; // 🔥 10 MINUTES RESET
+  renderHome();
+}
+
+/* -------------------- START -------------------- */
+renderHome();
+</script>
+
+</body>
+</html>
